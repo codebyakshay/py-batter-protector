@@ -42,8 +42,8 @@ voltage_hyst_max="2"
 #   the user or others.
 # - Ensure that you are not sourcing any user-writable scripts within this script to avoid overrides of
 #   security critical variables.
-binfolder="/usr/local/co.palokaj.battery"
-battery_binary="$binfolder/battery"
+binfolder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+battery_binary="$binfolder/battery_helper"
 smc_binary="$binfolder/smc"
 
 # GitHub URLs for setup and updates.
@@ -756,9 +756,6 @@ if [[ "$action" == "charging" ]]; then
 
 	log "Setting $action to $setting"
 
-	# Disable running daemon
-	$battery_binary maintain stop
-
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then
 		enable_charging
@@ -777,9 +774,6 @@ fi
 if [[ "$action" == "adapter" ]]; then
 
 	log "Setting $action to $setting"
-
-	# Disable running daemon
-	$battery_binary maintain stop
 
 	# Set charging to on and off
 	if [[ "$setting" == "on" ]]; then

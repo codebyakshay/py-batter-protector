@@ -66,9 +66,14 @@ if [ "$1" == "--stop" ] || [ "$1" == "--uninstall" ]; then
     exit 0
 fi
 
+if [ "$1" == "--stats" ]; then
+    "$PYTHON_PATH" "$TARGET_DIR/monitor.py" --stats
+    exit 0
+fi
+
 if [ -n "$1" ]; then
     echo "Unknown flag: $1"
-    echo "Valid flags: --charge, --reset, --stop, --uninstall"
+    echo "Valid flags: --charge, --reset, --stop, --uninstall, --stats"
     exit 1
 fi
 
@@ -133,5 +138,6 @@ echo "Try:  sudo battery"
 echo "      sudo battery --stop"
 echo "      sudo battery --charge"
 echo "      sudo battery --reset"
+echo "      battery --stats"
 echo ""
 echo "📂 View real-time background logs anytime with: tail -f /var/log/py-battery-protector.log"

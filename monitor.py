@@ -45,24 +45,14 @@ class HardwareController:
     as the underlying utility rejects being explicitly invoked by root.
     """
     def _run_battery_cmd(self, command: str, *args):
-        # Determine the current console user
-        try:
-            console_user = subprocess.check_output(["stat", "-f", "%Su", "/dev/console"]).decode().strip()
-        except Exception:
-            console_user = None
-
+        # We explicitly run as root because we need direct SMC hardware access without password prompts
         cmd_list = [BATTERY_CLI, command] + list(args)
-        
-        # If running as root but there's a console user, drop privileges
-        if os.geteuid() == 0 and console_user and console_user != "root":
-            cmd_list = ["sudo", "-u", console_user] + cmd_list
-            
         subprocess.run(cmd_list, check=True)
 
     def stop_charging(self):
         """Commands the hardware to stop charging the battery (SMC bypass)."""
         try:
-            self._run_battery_cmd("discharging")
+            self._run_battery_cmd("charging", "off")
             return True
         except subprocess.CalledProcessError:
             return False
@@ -70,17 +60,15 @@ class HardwareController:
     def start_charging(self):
         """Commands the hardware to resume charging the battery."""
         try:
-            self._run_battery_cmd("charging")
+            self._run_battery_cmd("charging", "on")
             return True
         except subprocess.CalledProcessError:
             return False
 
     def reset_to_full(self):
-        """Resets hardware to 100% maintenance mode for travel/full charge."""
+        """Resets hardware to 100% normal macOS charging behavior for travel."""
         try:
-            # Set internal maintain to 100 (Normal behavior)
-            self._run_battery_cmd("maintain", "100")
-            # Ensure it's charging
+            # Just enable native charging to hit 100% implicitly
             self.start_charging()
             return True
         except subprocess.CalledProcessError:
@@ -208,6 +196,18 @@ class BatteryMonitor:
             if os.path.exists(CONFIG_FILE):
                 os.remove(CONFIG_FILE)
             cls.load_config()
+            return
+            
+        # Support for --stats flag
+        if "--stats" in sys.argv:
+            config = cls.load_config()
+            print("\n" + "="*40)
+            print("🔋 py-battery-protector: CURRENT STATS")
+            print("="*40)
+            print(f"Ceiling (High Threshold): {config.get('high_threshold', 82)}%")
+            print(f"Sailing Floor:            {config.get('sailing_floor', 50)}%")
+            print(f"Floor (Low Threshold):    {config.get('low_threshold', 30)}%")
+            print("="*40 + "\n")
             return
             
         config = cls.load_config()
