@@ -209,6 +209,9 @@ class BatteryMonitor:
                 os.remove(CONFIG_FILE)
             cls.load_config()
             return
+            
+        config = cls.load_config()
+        
         notifier = Notifier()
         hw = HardwareController()
         is_sailing = False
