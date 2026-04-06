@@ -1,0 +1,8 @@
+# py-battery-protector external dependencies
+# ---------------------------------------------
+# This project is designed to be extremely lightweight and native.
+# It uses strictly standard Python 3 builtin libraries:
+# (os, sys, time, json, subprocess, logging, shutil)
+# 
+# No external pip installations are required!
+# You only need Python 3 installed on your Mac.

@@ -1,0 +1,5 @@
+{
+    "high_threshold": 85,
+    "sailing_floor": 50,
+    "low_threshold": 28
+}
