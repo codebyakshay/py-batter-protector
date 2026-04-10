@@ -10,6 +10,7 @@ import logging
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 BATTERY_CLI = os.path.join(PROJECT_ROOT, "bin", "battery_helper")
 CONFIG_FILE = os.path.join(PROJECT_ROOT, "config.json")
+STATE_FILE = os.path.join(PROJECT_ROOT, "state.json")
 from notifier import Notifier
 
 def setup_logger():
@@ -26,11 +27,10 @@ def setup_logger():
     except (PermissionError, OSError):
         log_path = os.path.join(PROJECT_ROOT, "py-battery-protector.log")
 
-    fh = logging.FileHandler(log_path)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-    
-    ch = logging.StreamHandler()
+    # We rely on LaunchDaemon's StandardOutPath/StandardErrorPath for file logging.
+    # Adding a direct FileHandler here causes double-logging when running as a daemon.
+    # However, we keep a StreamHandler so it works for both console and daemon mode.
+    ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
     
@@ -90,6 +90,26 @@ class BatteryMonitor:
                 return json.load(f)
         except Exception:
             return BatteryMonitor.setup_wizard()
+
+    @staticmethod
+    def load_state():
+        """Loads the current 'Sailing Mode' state from disk."""
+        if not os.path.exists(STATE_FILE):
+            return {"is_sailing": False}
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {"is_sailing": False}
+
+    @staticmethod
+    def save_state(state):
+        """Saves the current state to disk."""
+        try:
+            with open(STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to save state: {e}")
 
     @staticmethod
     def setup_wizard():
@@ -214,9 +234,26 @@ class BatteryMonitor:
         
         notifier = Notifier()
         hw = HardwareController()
-        is_sailing = False
+        
+        stored_state = cls.load_state()
+        is_sailing = stored_state.get("is_sailing", False)
         last_status = None
         
+        # Failsafe: Handle initial state correctly
+        percent, charging = cls.get_stats()
+        high_threshold = config.get('high_threshold', 82)
+        
+        if percent >= high_threshold:
+            if not is_sailing:
+                logger.info(f"Startup: Battery ({percent}%) is already at/above ceiling ({high_threshold}%). Engaging Sailing Mode.")
+                is_sailing = True
+                cls.save_state({"is_sailing": True})
+            # Always ensure charging is OFF if we are at/above ceiling on start
+            hw.stop_charging()
+        elif not is_sailing and charging and percent < high_threshold:
+            logger.info("Startup: Battery is below ceiling. Ensuring charging is ACTIVE.")
+            hw.start_charging()
+
         logger.info(f"ACTIVE Sailing Mode ({config['low_threshold']}-{config['high_threshold']}-{config['sailing_floor']}) engaged...")
         
         try:
@@ -237,10 +274,12 @@ class BatteryMonitor:
                         msg = ""
                         if alert_type == "LOW_BATTERY":
                             is_sailing = False
+                            cls.save_state({"is_sailing": False})
                             hw.start_charging()
                             msg = f"Battery floor reached ({percent}%). Resuming charge automatically."
                         elif alert_type == "HIGH_BATTERY":
                             is_sailing = True
+                            cls.save_state({"is_sailing": True})
                             hw.stop_charging()
                             msg = f"Battery ceiling reached ({percent}%). Charging paused automatically (Sailing Mode)."
                         
@@ -252,8 +291,11 @@ class BatteryMonitor:
                         # Reset notification throttling when in safe zone
                         notifier.should_notify(None)
                         # If manually charging above the sailing floor, exit sailing status
-                        if charging and percent > config['sailing_floor']:
+                        if charging and percent > config['sailing_floor'] and is_sailing:
                             is_sailing = False
+                            cls.save_state({"is_sailing": False})
+                            logger.info("Charging detected above sailing floor. Exiting sailing mode.")
+                            should_print = True
 
                     if should_print:
                         logger.info(log_str)
